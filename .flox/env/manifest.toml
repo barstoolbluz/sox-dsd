@@ -43,6 +43,7 @@ SOX_ENABLE_OPTIONAL_FORMATS = "true"
 
 ##  defines reproducible builds using Nix's deterministic system
 [build]
+sox-dsd.sandbox = "pure"
 sox-dsd.command = '''
 # creates directory structure in $out
 mkdir -p $out/bin
