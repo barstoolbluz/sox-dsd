@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-# Maintainable patch-based system for Sox DSD support
+# patches current-stable sox dsd sources
 
 set -e
 
