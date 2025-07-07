@@ -145,4 +145,9 @@ fi
 make -j$(nproc)
 
 make install
+
+# Install documentation
+mkdir -p $out/share/doc/sox-dsd
+cp README.md $out/share/doc/sox-dsd/README
+cp SOX_DSD_BASICS.md $out/share/doc/sox-dsd/DSD_BASICS
 '''
