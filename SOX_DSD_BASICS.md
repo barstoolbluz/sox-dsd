@@ -13,11 +13,10 @@ Direct Stream Digital (DSD) is a digital audio encoding method utilizing 1-bit s
 
 ### Modulator Options:
 
-Multiple methods available in SoX-DSD:
+Two primary methods available in SoX-DSD:
 
 * **CLANS (Closed Loop Analysis of Noise Shapers)**: Optimizes noise shaping for lower distortion and stable operation.
 * **SDM (Standard Delta-Sigma Modulation)**: Conventional approach leveraging Delta-Sigma Toolbox functions.
-* **CRFB (Cascade of Resonators with distributed FeedBack)**: Alternative modulator design with different noise-shaping characteristics.
 
 Higher-order modulators (e.g., 7th or 8th order) significantly reduce audible noise (\~6dB/octave increase), but risk instability and overload, particularly at higher amplitudes and lower DSD rates.
 
@@ -46,7 +45,6 @@ sox RightMark32-96.wav RightMark32-96-DSD64.dsf rate -v 2822400 sdm -f sdm-8
 
 * `rate -v` ensures very high-quality sample rate conversion.
 * `sdm -f sdm-8` specifies the 8th-order standard noise shaper.
-* Alternative filters: `clans-8`, `crfb-8`, `clans-4`, `sdm-4`, etc.
 
 ### Advanced Encoding Command with Trellis Optimization:
 
@@ -62,7 +60,6 @@ sox "+3.1dBDSD 1kHz Sine (32-192kHz).wav" "+3.1dBDSD 1kHz Sine (DSD64, clans-8).
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-t 32`   | **Trellis lookahead depth**: Determines how many samples ahead the encoder considers for optimal quantization. Higher values (up to 64) significantly improve optimization but at substantial computational cost. |
 | `-n 32`   | **Number of trellis nodes**: Controls the complexity by evaluating more quantization paths. Higher values (16–32+) greatly enhance quality but drastically increase computational requirements.                   |
-| `-l 64`   | **Trellis latency**: Overrides internal latency (delay in samples). Usually set automatically, but can be manually increased for slightly better optimization results at the cost of additional processing delay. |
 
 **Practical Interpretation:**
 
@@ -77,11 +74,7 @@ sox input.wav output.dsf rate -v 2822400 sdm -f clans-8 -t 8 -n 8
 
 # Higher-quality mastering-level settings:
 sox input.wav output.dsf rate -v 2822400 sdm -f clans-8 -t 32 -n 32
-
-# Very high quality with explicit latency control:
-sox input.wav output.dsf rate -v 2822400 sdm -f clans-8 -t 32 -n 32 -l 64
 ```
-*Note*: Trellis is always optional.
 
 ## SACD and DSD Signal Level Standards
 
@@ -106,12 +99,11 @@ sox input.wav output.dsf rate -v 2822400 sdm -f clans-8 -t 32 -n 32 -l 64
 Comparative measurements indicate:
 
 * SDM-8 (SoX-DSD) closely matches PCM playback performance in THD and noise floor.
-* CLANS provides greater stability at slightly elevated audible noise levels.
-* JRiver’s DSD conversion closely resembles SoX-DSD’s SDM-8 in performance, though slightly higher noise just below 20kHz.
 
-## Practical Guidelines for Audiophiles
+* CLANS provides greater stability at slightly elevated audible noise levels.
 
 * **DSD128 and above**: Recommended for audiophiles to shift noise further into ultrasonic frequencies.
+
 * At DSD64, a low-pass filter around 50kHz is advisable to manage aggressive ultrasonic noise shaping.
 
 ## Modulator Selection and Subjective Audio Quality
