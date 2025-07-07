@@ -1,20 +1,7 @@
-## Flox Environment Manifest -----------------------------------------
-##
-##   _Everything_ you need to know about the _manifest_ is here:
-##
-##               https://flox.dev/docs/concepts/manifest
-##
-## -------------------------------------------------------------------
-# Flox manifest version managed by Flox CLI
 version = 1
 
-## Install Packages --------------------------------------------------
-##  $ flox install gum  <- puts a package in [install] section below
-##  $ flox search gum   <- search for a package
-##  $ flox show gum     <- show all versions of a package
-## -------------------------------------------------------------------
 [install]
-# Core build tools
+# core build tools
 autoconf.pkg-path = "autoconf"
 automake.pkg-path = "automake"
 libtool.pkg-path = "libtool"
@@ -22,7 +9,7 @@ gnumake.pkg-path = "gnumake"
 pkg-config.pkg-path = "pkg-config"
 zlib.pkg-path = "zlib"
 
-# Compiler and core libraries
+# platform-specific compilers + dependencies
 gcc.pkg-path = "gcc"
 gcc.systems = ["x86_64-linux", "aarch64-linux"]
 clang.pkg-path = "clang"
@@ -33,11 +20,11 @@ CoreFoundation.pkg-path = "darwin.apple_sdk.frameworks.CoreFoundation"
 CoreFoundation.priority = 2
 CoreFoundation.systems = ["x86_64-darwin", "aarch64-darwin"]
 
-# Essential audio libraries (absolutely required)
+# audio libs
 libsndfile.pkg-path = "libsndfile"
 libltdl.pkg-path = "libtool"  # provides libltdl
 
-# Audio codec libraries
+# audio codec libs
 flac.pkg-path = "flac"
 lame.pkg-path = "lame"
 libmad.pkg-path = "libmad"
@@ -57,83 +44,27 @@ ffmpeg.pkg-path = "ffmpeg"
 ffmpeg.systems = ["aarch64-linux", "aarch64-darwin"]
 ffmpeg.priority = 7
 
-
-# Metadata and utility libraries
+# metadata + utility libs
 libid3tag.pkg-path = "libid3tag"
 file.pkg-path = "file"  # provides libmagic
+gnused.pkg-path = "gnused"  # provides GNU sed for macOS
 
-# Audio I/O libraries (Linux)
+# audio i/o libs (linux only)
 alsa-lib.pkg-path = "alsa-lib"
 alsa-lib.systems = ["x86_64-linux", "aarch64-linux"]
 libpulseaudio.pkg-path = "libpulseaudio"
 libpulseaudio.systems = ["x86_64-linux", "aarch64-linux"]
 
-# Effects libraries
+# effects libs
 ladspa-sdk.pkg-path = "ladspa-sdk"
 ladspa-sdk.systems = ["x86_64-linux", "aarch64-linux"]
 
 
-## Environment Variables ---------------------------------------------
-##  ... available for use in the activated environment
-##      as well as [hook], [profile] scripts and [services] below.
-## -------------------------------------------------------------------
-[vars]
-# INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-## Activation Hook ---------------------------------------------------
-##  ... run by _bash_ shell when you run 'flox activate'.
-## -------------------------------------------------------------------
-[hook]
-on-activate = '''
-export LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS:${LD_LIBRARY_PATH:-}"
-export PKG_CONFIG_PATH="$FLOX_ENV_LIB_DIRS/pkgconfig:${PKG_CONFIG_PATH:-}"
-'''
-
-
-## Profile script ----------------------------------------------------
-## ... sourced by _your shell_ when you run 'flox activate'.
-## -------------------------------------------------------------------
-[profile]
-# common = '''
-#   gum style \
-#   --foreground 212 --border-foreground 212 --border double \
-#   --align center --width 50 --margin "1 2" --padding "2 4" \
-#     $INTRO_MESSAGE
-# '''
-## Shell-specific customizations such as setting aliases go here:
-# bash = ...
-# zsh  = ...
-# fish = ...
-
-
-## Services ---------------------------------------------------------
-##  $ flox services start             <- Starts all services
-##  $ flox services status            <- Status of running services
-##  $ flox activate --start-services  <- Activates & starts all
-## ------------------------------------------------------------------
-[services]
-# myservice.command = "python3 -m http.server"
-
-
-## Include ----------------------------------------------------------
-## ... environments to create a composed environment
-## ------------------------------------------------------------------
-[include]
-# environments = [
-#     { dir = "../common" }
-# ]
-
-
-## Build and publish your own packages ------------------------------
-##  $ flox build
-##  $ flox publish
-## ------------------------------------------------------------------
-[build]
-sox.description = "Måns Rullgård's fork of SoX with DSD support"
-sox.version = "14.4.2"
-sox.sandbox = "pure"
-sox.command = '''
+[build.sox]
+description = "Måns Rullgård's fork of SoX with DSD + maximum codec/container support"
+version = "14.4.2"
+sandbox = "pure"
+command = '''
 set -euo pipefail
 mkdir -p "$out"
 
@@ -145,10 +76,52 @@ else
     echo "math.h include already present"
 fi
 
-echo "Generating configure script..."
+# fixes function pointer type compatibility issues on darwin
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Find all C source files and fix uint64_t parameter issues in seek functions
+    find src -name "*.c" -exec grep -l "uint64_t.*offset" {} \; | while read file; do
+        echo "Patching $file..."
+        sed -i 's/uint64_t \([A-Z_]*\) offset/sox_uint64_t \1 offset/g' "$file"
+    done
+    
+    # fixes lsx_rawseek function definitions and declarations
+    echo "Fixing lsx_rawseek function signatures..."
+    # fixes header declaration
+    sed -i 's/int lsx_rawseek(sox_format_t \* ft, uint64_t offset)/int lsx_rawseek(sox_format_t * ft, sox_uint64_t offset)/g' src/sox_i.h
+    # fixes function definition
+    sed -i 's/int lsx_rawseek(sox_format_t \* ft, uint64_t offset)/int lsx_rawseek(sox_format_t * ft, sox_uint64_t offset)/g' src/raw.c
+    
+    # fixes any remaining uint64_t in function pointer contexts
+    find src -name "*.c" -exec grep -l "uint64_t" {} \; | while read file; do
+        echo "Final cleanup of uint64_t types in $file..."
+        sed -i 's/(\(sox_format_t[^,]*\), uint64_t/(\1, sox_uint64_t/g' "$file"
+    done
+else
+    echo "Not on macOS, skipping function pointer type fixes"
+fi
+
 autoreconf -fiv
 
-echo "Configuring SoX with maximum codec support..."
+AUDIO_OPTS=""
+
+if [[ $(uname) == "Darwin" ]]; then
+  echo "Detected macOS"
+  AUDIO_OPTS="\
+    --with-coreaudio \
+    --without-alsa \
+    --without-pulseaudio \
+    --without-oss \
+    --without-ao"
+else
+  echo "Assuming Linux or other Unix"
+  AUDIO_OPTS="\
+    --with-alsa \
+    --with-pulseaudio \
+    --without-coreaudio \
+    --without-oss \
+    --without-ao"
+fi
+
 ./configure \
     --prefix="$out" \
     --enable-shared \
@@ -166,52 +139,10 @@ echo "Configuring SoX with maximum codec support..."
     --with-id3tag \
     --with-ladspa \
     --with-magic \
-    --without-ao \
-    --without-oss \
-    --without-coreaudio \
-    --with-alsa \
-    --with-pulseaudio \
-    --with-ffmpeg
+    --with-ffmpeg \
+    $AUDIO_OPTS
 
-echo "Building SoX..."
 make -j$(nproc)
 
-echo "Installing SoX to $out..."
 make install
-
-echo "✓ SoX build complete!"
-echo "Binary installed at: $out/bin/sox"
-
-# Set library path for testing
-export LD_LIBRARY_PATH="$out/lib:${LD_LIBRARY_PATH:-}"
-
-# Show what we built
-echo ""
-echo "=== Build Summary ==="
-ls -la "$out/bin/"
-LD_LIBRARY_PATH="$out/lib:${LD_LIBRARY_PATH:-}" "$out/bin/sox" --version
-echo ""
-echo "=== Supported Formats ==="
-LD_LIBRARY_PATH="$out/lib:${LD_LIBRARY_PATH:-}" "$out/bin/sox" --help-format=all 2>/dev/null | head -20 || true
-echo ""
-echo "=== DSD Format Check ==="
-LD_LIBRARY_PATH="$out/lib:${LD_LIBRARY_PATH:-}" "$out/bin/sox" --help-format=dsf 2>/dev/null || echo "DSF not found"
-LD_LIBRARY_PATH="$out/lib:${LD_LIBRARY_PATH:-}" "$out/bin/sox" --help-format=dff 2>/dev/null || echo "DFF not found"
-
-#if [ "$(uname)" = "Linux" ]; then
-#  remove-references-to -t "$(which gcc | xargs realpath | sed -E 's#^(/nix/store/[^/]+).*#\1#')" "$out/bin/sox"
-#fi
 '''
-
-
-## Other Environment Options -----------------------------------------
-[options]
-# Systems that environment is compatible with
-# systems = [
-#   "aarch64-darwin",
-#   "aarch64-linux",
-#   "x86_64-darwin",
-#   "x86_64-linux",
-# ]
-# Uncomment to disable CUDA detection.
-# cuda-detection = false
